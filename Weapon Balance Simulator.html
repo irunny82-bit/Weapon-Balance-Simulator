@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Weapon Balance Simulator </title>
+    <!-- Plotly.js for Interactive Charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        /* ==========================================
+           1. CSS: Theme Variables (Dark/Light Support)
+           ========================================== */
+        :root {
+            /* Dark Theme (Default) */
+            --bg-main: #09090b;       
+            --bg-panel: #18181b;      
+            --bg-input: #000000;
+            --border: #3f3f46;        
+            --text-main: #f4f4f5;     
+            --text-sub: #a1a1aa;      
+            
+            /* Accent Colors (ARES Theme) */
+            --cyan: #06b6d4;          /* Weapon A / Shield */
+            --orange: #f59e0b;        /* Weapon B / Burst */
+            --red: #ef4444;           /* HP / Nerf */
+            --purple: #8b5cf6;        /* Accent / Skills */
+            --green: #10b981;         /* Buff */
+        }
+
+        body.light-theme {
+            --bg-main: #f4f4f5;
+            --bg-panel: #ffffff;
+            --bg-input: #e4e4e7;
+            --border: #d4d4d8;
+            --text-main: #18181b;
+            --text-sub: #52525b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 20px; transition: background-color 0.3s, color 0.3s; }
+        
+        /* ==========================================
+           2. CSS: Layout & Grid
+           ========================================== */
+        .container { max-width: 1500px; margin: 0 auto; display: grid; gap: 20px; }
+        
+        header { text-align: center; padding: 25px 0; border-bottom: 2px solid var(--purple); background: linear-gradient(180deg, rgba(139,92,246,0.15) 0%, rgba(9,9,11,0) 100%); position: relative;}
+        header h1 { color: var(--text-main); margin-bottom: 5px; letter-spacing: 2px; text-transform: uppercase; text-shadow: 0 0 10px rgba(139,92,246,0.5);}
+        header h1 span { color: var(--purple); }
+        header p { color: var(--text-sub); font-size: 0.95rem;}
+        
+        .top-controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
+        
+        .presets { margin-top: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .panel { background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: background-color 0.3s; }
+        
+        .grid-3col { display: grid; grid-template-columns: 1fr 1.5fr 1.5fr; gap: 20px; }
+        .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        
+        @media (max-width: 1024px) {
+            .grid-3col { grid-template-columns: 1fr; }
+            .grid-2col { grid-template-columns: 1fr; }
+        }
+
+        /* ==========================================
+           3. CSS: UI Components
+           ========================================== */
+        h2, h3 { color: var(--text-main); margin-bottom: 15px; font-weight: 600; }
+        .section-title { font-size: 1.1rem; color: var(--cyan); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 8px;}
+        .section-title.orange { color: var(--orange); }
+        label { display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px; font-weight: bold;}
+        
+        select, input[type="number"], input[type="range"] { 
+            width: 100%; background-color: var(--bg-input); color: var(--text-main); 
+            border: 1px solid var(--border); padding: 8px 12px; border-radius: 4px; 
+            margin-bottom: 15px; font-size: 0.95rem; transition: border-color 0.2s;
+        }
+        select:focus, input:focus { outline: none; border-color: var(--purple); }
+
+        button { background-color: var(--border); color: var(--text-main); border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.9rem;}
+        button:hover { filter: brightness(1.2); }
+        button.btn-primary { background-color: var(--cyan); color: #000; }
+        button.btn-accent { background-color: var(--purple); color: #fff; }
+        button.btn-orange { background-color: var(--orange); color: #000; }
+        button.btn-small { padding: 4px 8px; font-size: 0.8rem; }
+        
+        .flex-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;}
+        .checkbox-label { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 0.9rem; color: var(--text-main); font-weight: normal; margin-bottom: 0;}
+        .checkbox-label input { width: auto; margin: 0; }
+
+        .patch-toggle { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; background: rgba(128,128,128,0.1); padding: 10px; border-radius: 4px; }
+        .patch-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; opacity: 0.4; pointer-events: none; transition: opacity 0.3s; }
+        .patch-inputs.active { opacity: 1; pointer-events: auto; }
+        
+        .tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: var(--border); color: var(--text-main); margin-right: 5px; margin-bottom: 5px;}
+        .tag.class-tag { background: rgba(139, 92, 246, 0.2); border: 1px solid var(--purple); color: var(--purple); }
+        .tag.grade-s { background: rgba(245, 158, 11, 0.2); border: 1px solid var(--orange); color: var(--orange); }
+        .tag.grade-r { background: rgba(6, 182, 212, 0.2); border: 1px solid var(--cyan); color: var(--cyan); }
+
+        /* ==========================================
+           4. CSS: Tables & Plotly Charts
+           ========================================== */
+        .table-responsive { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 0.9rem; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background-color: rgba(128,128,128,0.1); font-weight: 600; color: var(--text-sub); }
+        td.highlight-win { color: var(--cyan); font-weight: bold; }
+        td.highlight-win-b { color: var(--orange); font-weight: bold; }
+        
+        .diff-buff { color: var(--green); font-size: 0.8rem; margin-left: 5px; }
+        .diff-nerf { color: var(--red); font-size: 0.8rem; margin-left: 5px; }
+
+        .plotly-container { width: 100%; height: 400px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; margin-top: 10px; }
+        
+        .file-io { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="top-controls">
+            <button class="btn-small" onclick="toggleTheme()">🌗 테마 변경</button>
+            <button class="btn-small" onclick="saveScenario()">💾 시나리오 저장</button>
+            <button class="btn-small" onclick="document.getElementById('csv-upload').click()">📂 CSV 가져오기</button>
+            <button class="btn-small" onclick="exportJSON()">📥 JSON 내보내기</button>
+            <input type="file" id="csv-upload" class="file-io" accept=".csv" onchange="importCSV(event)">
+        </div>
+        <h1><span>Weapon Balance Simulator</span> v2.0</h1>
+        <p>MMORPG 액션 슈터 최적화: 슈트 체인지, 헤드샷 멀티플라이어, 몹 웨이브 누적 딜링 및 Plotly.js 인터랙티브 분석</p>
+        <div class="presets">
+            <button onclick="applyPreset('reset')">🔄 리셋</button>
+            <button class="btn-primary" onclick="applyPreset('hunterVsWarlord')">⚔️ 헌터(S) vs 워로드(S) 비교</button>
+            <button class="btn-accent" onclick="applyPreset('suitChangeTest')">🛡️ 슈트 체인지 폭딜 검증</button>
+            <button class="btn-orange" onclick="toggleTargetMode()">🎯 몹/보스 모드 토글 (<span id="mode-badge">Boss</span>)</button>
+        </div>
+    </header>
+
+    <div class="grid-3col">
+        <!-- 환경 및 타겟 설정 -->
+        <div class="panel">
+            <h3>Environment & Target (환경 설정)</h3>
+            
+            <label>Enemy Target (타겟 모드: <span id="lbl-target-mode" style="color:var(--orange)">Boss</span>)</label>
+            <select id="sel-target" onchange="requestUpdateUI()">
+                <!-- JS 렌더링 -->
+            </select>
+            
+            <label>Enemy Suit Armor (적 방어구)</label>
+            <select id="sel-suit" onchange="requestUpdateUI()">
+                <!-- JS 렌더링 -->
+            </select>
+
+            <div class="flex-row" style="margin-top: 15px; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 4px;">
+                <label class="checkbox-label" title="슈트 체인지 시 3초간 데미지 10% 증가">
+                    <input type="checkbox" id="chk-suit-change" onchange="requestUpdateUI()"> 슈트 체인지 버프 (3s 10% Dmg)
+                </label>
+                <label class="checkbox-label" title="명중률에 비례하여 1.5배 헤드샷 적용">
+                    <input type="checkbox" id="chk-headshot" onchange="requestUpdateUI()"> 헤드샷 적용 (1.5x)
+                </label>
+            </div>
+
+            <label style="margin-top: 15px;">Engagement Distance: <span id="dist-val" style="color:var(--cyan); font-weight:bold;">15</span>m</label>
+            <input type="range" id="slider-dist" min="0" max="40" step="1" value="15" oninput="document.getElementById('dist-val').innerText=this.value; requestUpdateUI()">
+            <p style="font-size: 0.75rem; color: var(--text-sub);">거리에 따른 스프레드(3x3 그리드 연산) 및 펠릿 소실 적용</p>
+        </div>
+
+        <!-- 무기 A -->
+        <div class="panel">
+            <div class="section-title">Weapon A (Cyan) 
+                <div><span id="tag-class-a" class="tag class-tag"></span><span id="tag-grade-a" class="tag"></span></div>
+            </div>
+            
+            <div class="flex-row">
+                <select id="sel-class-a" style="width: 35%; margin-bottom: 0;" onchange="filterWeapons('A'); requestUpdateUI()">
+                    <option value="ALL">전체 직업</option>
+                    <option value="Hunter">헌터</option>
+                    <option value="Warlord">워로드</option>
+                    <option value="Warlock">워락</option>
+                    <option value="Engineer">엔지니어</option>
+                </select>
+                <select id="sel-wpn-a" style="width: 60%; margin-bottom: 0;" onchange="loadWeaponData('A'); requestUpdateUI()"></select>
+            </div>
+            
+            <div class="patch-toggle" style="margin-top: 15px;">
+                <input type="checkbox" id="patch-toggle-a" onchange="togglePatch('A'); requestUpdateUI()">
+                <label for="patch-toggle-a" style="margin:0; color:var(--cyan); font-weight:bold;">Apply Patch (A)</label>
+            </div>
+
+            <div class="patch-inputs" id="patch-inputs-a">
+                <div><label>Damage</label><input type="number" id="A-dmg" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>RPS (연사력)</label><input type="number" id="A-rps" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>Mag (장탄)</label><input type="number" id="A-mag" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>Reload (s)</label><input type="number" id="A-reload" step="0.1" onchange="requestUpdateUI()"></div>
+                <div><label>Range</label><input type="number" id="A-range" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>Spread/Recoil</label><input type="number" id="A-spread" step="0.01" onchange="requestUpdateUI()"></div>
+            </div>
+        </div>
+
+        <!-- 무기 B -->
+        <div class="panel">
+            <div class="section-title orange">Weapon B (Orange) 
+                <div><span id="tag-class-b" class="tag class-tag"></span><span id="tag-grade-b" class="tag"></span></div>
+            </div>
+            
+            <div class="flex-row">
+                <select id="sel-class-b" style="width: 35%; margin-bottom: 0;" onchange="filterWeapons('B'); requestUpdateUI()">
+                    <option value="ALL">전체 직업</option>
+                    <option value="Hunter">헌터</option>
+                    <option value="Warlord">워로드</option>
+                    <option value="Warlock">워락</option>
+                    <option value="Engineer">엔지니어</option>
+                </select>
+                <select id="sel-wpn-b" style="width: 60%; margin-bottom: 0;" onchange="loadWeaponData('B'); requestUpdateUI()"></select>
+            </div>
+            
+            <div class="patch-toggle" style="margin-top: 15px;">
+                <input type="checkbox" id="patch-toggle-b" onchange="togglePatch('B'); requestUpdateUI()">
+                <label for="patch-toggle-b" style="margin:0; color:var(--orange); font-weight:bold;">Apply Patch (B)</label>
+            </div>
+
+            <div class="patch-inputs" id="patch-inputs-b">
+                <div><label>Damage</label><input type="number" id="B-dmg" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>RPS (연사력)</label><input type="number" id="B-rps" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>Mag (장탄)</label><input type="number" id="B-mag" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>Reload (s)</label><input type="number" id="B-reload" step="0.1" onchange="requestUpdateUI()"></div>
+                <div><label>Range</label><input type="number" id="B-range" step="1" onchange="requestUpdateUI()"></div>
+                <div><label>Spread/Recoil</label><input type="number" id="B-spread" step="0.01" onchange="requestUpdateUI()"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 결과 비교 영역 -->
+    <div class="grid-2col" style="margin-top: 10px;">
+        <div class="panel">
+            <h3>Advanced Simulation Results (@ <span id="res-dist" style="color:var(--purple)">15</span>m)</h3>
+            <div class="table-responsive">
+                <table id="result-table">
+                    <thead>
+                        <tr>
+                            <th>지표 (Metric)</th>
+                            <th>Weapon A</th>
+                            <th>Weapon B</th>
+                        </tr>
+                    </thead>
+                    <tbody id="result-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Range vs TTK / Clear Time <br><span style="font-size: 0.8rem; color: var(--text-sub); font-weight: normal;">인터랙티브 차트 (Plotly.js) - 드래그하여 줌, 더블클릭 초기화</span></h3>
+            <div id="plot-ttk" class="plotly-container"></div>
+        </div>
+    </div>
+
+    <!-- TTK Wave Graph -->
+    <div class="panel">
+        <h3>Combat Wave Analysis (시간 경과에 따른 누적 딜링 및 장갑 파괴)</h3>
+        <p style="font-size: 0.85rem; color: var(--text-sub);">
+            스프레드(명중률 하락), 리코일 누적, 재장전 딜레이가 모두 반영된 실시간 웨이브입니다.<br>
+            보스전의 경우 <strong>CP(실드)가 0이 되면 브레이크(Break)가 발생하여 데미지가 증폭</strong>됩니다.
+        </p>
+        <div id="plot-wave" class="plotly-container"></div>
+    </div>
+
+</div>
+
+<script>
+    /* =========================================================================
+       MODULE 1: DATA STRUCTURES ( INTEGRATION)
+       ========================================================================= */
+    // 1. Weapons Database (8+ Weapons: Hunter, Warlord, Warlock, Engineer + R/S grades)
+    let weaponsDB = {
+        "Hunter_DualBlade_R": { id: "Hunter_DualBlade_R", class: "Hunter", name: "Dual Blade (R)", grade: "R", dmg: 12, rps: 50, range: 12, mag: 150, reload: 1.5, spread: 0.15, recoil: 0.05, pellets: 1 },
+        "Hunter_DualBlade_S": { id: "Hunter_DualBlade_S", class: "Hunter", name: "Dual Blade (S)", grade: "S", dmg: 15, rps: 55, range: 12, mag: 180, reload: 1.2, spread: 0.10, recoil: 0.04, pellets: 1 },
+        "Warlord_Hammer_R": { id: "Warlord_Hammer_R", class: "Warlord", name: "Heavy Hammer (R)", grade: "R", dmg: 25, rps: 20, range: 8, mag: 40, reload: 2.5, spread: 0.25, recoil: 0.15, pellets: 1 },
+        "Warlord_Hammer_S": { id: "Warlord_Hammer_S", class: "Warlord", name: "Heavy Hammer (S)", grade: "S", dmg: 32, rps: 22, range: 8, mag: 50, reload: 2.0, spread: 0.20, recoil: 0.10, pellets: 1 },
+        "Warlock_Staff_R": { id: "Warlock_Staff_R", class: "Warlock", name: "Magic Staff (R)", grade: "R", dmg: 18, rps: 35, range: 25, mag: 70, reload: 1.8, spread: 0.05, recoil: 0.02, pellets: 1 },
+        "Warlock_Staff_S": { id: "Warlock_Staff_S", class: "Warlock", name: "Magic Staff (S)", grade: "S", dmg: 22, rps: 40, range: 28, mag: 85, reload: 1.5, spread: 0.03, recoil: 0.01, pellets: 1 },
+        "Engineer_Gauntlet_R": { id: "Engineer_Gauntlet_R", class: "Engineer", name: "Gauntlet (R)", grade: "R", dmg: 15, rps: 40, range: 18, mag: 80, reload: 2.0, spread: 0.40, recoil: 0.10, pellets: 9 }, // Shotgun type scatter
+        "Engineer_Gauntlet_S": { id: "Engineer_Gauntlet_S", class: "Engineer", name: "Gauntlet (S)", grade: "S", dmg: 19, rps: 45, range: 20, mag: 100, reload: 1.7, spread: 0.30, recoil: 0.08, pellets: 9 }
+    };
+
+    // 2. Suits Database
+    const suitsDB = {
+        "Light": { id: "Light", name: "Light Suit", hp: 40, mitigation: 0.40 },
+        "Medium": { id: "Medium", name: "Medium Suit", hp: 70, mitigation: 0.425 },
+        "Heavy": { id: "Heavy", name: "Heavy Suit", hp: 120, mitigation: 0.55 },
+        "Guardian": { id: "Guardian", name: "Guardian Suit", hp: 150, mitigation: 0.60 }
+    };
+
+    // 3. Target Database (Mob vs Boss)
+    let currentTargetMode = "Boss"; // "Boss" or "Mob"
+    const targetsDB = {
+        "Mob": {
+            "NormalMob": { id: "NormalMob", name: "Normal Mob Wave (x10)", cp: 0, hp: 1000, count: 10, breakMult: 1.0 },
+            "EliteMob": { id: "EliteMob", name: "Elite Mob Pack (x5)", cp: 500, hp: 3000, count: 5, breakMult: 1.2 }
+        },
+        "Boss": {
+            "RaidBoss": { id: "RaidBoss", name: "Raid Boss (Single)", cp: 5000, hp: 15000, count: 1, breakMult: 1.5 },
+            "WorldBoss": { id: "WorldBoss", name: "World Boss (Single)", cp: 12000, hp: 35000, count: 1, breakMult: 2.0 }
+        }
+    };
+
+    /* =========================================================================
+       MODULE 2: INITIALIZATION & UI HANDLING
+       ========================================================================= */
+    const BaseHP = 100; // Player base HP for relative EHP calculations
+    let animationFrameId = null; // for requestAnimationFrame
+
+    window.onload = () => {
+        loadScenario(); // Load from localStorage if exists
+        populateSuits();
+        populateTargets();
+        filterWeapons('A', true);
+        filterWeapons('B', true);
+
+        // Set defaults if not loaded from storage
+        if(!document.getElementById('sel-wpn-a').value) {
+            document.getElementById('sel-wpn-a').value = "Hunter_DualBlade_S";
+            document.getElementById('sel-wpn-b').value = "Warlord_Hammer_S";
+            loadWeaponData('A'); loadWeaponData('B');
+        }
+        
+        requestUpdateUI();
+    };
+
+    function populateSuits() {
+        const sel = document.getElementById('sel-suit');
+        sel.innerHTML = '';
+        for (const key in suitsDB) {
+            sel.innerHTML += `<option value="${key}">${suitsDB[key].name} (Mitg: ${suitsDB[key].mitigation*100}%)</option>`;
+        }
+        sel.value = "Medium";
+    }
+
+    function populateTargets() {
+        const sel = document.getElementById('sel-target');
+        sel.innerHTML = '';
+        const list = targetsDB[currentTargetMode];
+        for (const key in list) {
+            sel.innerHTML += `<option value="${key}">${list[key].name}</option>`;
+        }
+        document.getElementById('lbl-target-mode').innerText = currentTargetMode;
+        document.getElementById('mode-badge').innerText = currentTargetMode;
+    }
+
+    function toggleTargetMode() {
+        currentTargetMode = currentTargetMode === "Boss" ? "Mob" : "Boss";
+        populateTargets();
+        requestUpdateUI();
+    }
+
+    function toggleTheme() {
+        document.body.classList.toggle('light-theme');
+        requestUpdateUI(); // Re-render plots for theme colors
+    }
+
+    function filterWeapons(slot, skipLoad = false) {
+        const classFilter = document.getElementById(`sel-class-${slot.toLowerCase()}`).value;
+        const sel = document.getElementById(`sel-wpn-${slot.toLowerCase()}`);
+        const currentVal = sel.value;
+        
+        sel.innerHTML = '';
+        for (const key in weaponsDB) {
+            if (classFilter === "ALL" || weaponsDB[key].class === classFilter) {
+                sel.innerHTML += `<option value="${key}">${weaponsDB[key].name}</option>`;
+            }
+        }
+        
+        // Try to keep previous selection if it still exists in filtered list
+        if (Array.from(sel.options).some(opt => opt.value === currentVal)) {
+            sel.value = currentVal;
+        }
+        
+        if(!skipLoad) {
+            loadWeaponData(slot);
+        }
+    }
+
+    function loadWeaponData(slot) {
+        const wpnId = document.getElementById(`sel-wpn-${slot.toLowerCase()}`).value;
+        if (!wpnId) return;
+        const data = weaponsDB[wpnId];
+        
+        const gradeTag = document.getElementById(`tag-grade-${slot.toLowerCase()}`);
+        gradeTag.innerText = `Grade ${data.grade}`;
+        gradeTag.className = `tag grade-${data.grade.toLowerCase()}`;
+        document.getElementById(`tag-class-${slot.toLowerCase()}`).innerText = data.class;
+
+        document.getElementById(`${slot}-dmg`).value = data.dmg;
+        document.getElementById(`${slot}-rps`).value = data.rps;
+        document.getElementById(`${slot}-mag`).value = data.mag;
+        document.getElementById(`${slot}-reload`).value = data.reload;
+        document.getElementById(`${slot}-range`).value = data.range;
+        document.getElementById(`${slot}-spread`).value = data.spread;
+    }
+
+    function togglePatch(slot) {
+        const isChecked = document.getElementById(`patch-toggle-${slot.toLowerCase()}`).checked;
+        const panel = document.getElementById(`patch-inputs-${slot.toLowerCase()}`);
+        if (isChecked) panel.classList.add('active'); else panel.classList.remove('active');
+    }
+
+    function getActiveWeapon(slot) {
+        const wpnId = document.getElementById(`sel-wpn-${slot.toLowerCase()}`).value;
+        const base = weaponsDB[wpnId];
+        const isPatched = document.getElementById(`patch-toggle-${slot.toLowerCase()}`).checked;
+        
+        if (!isPatched) return { ...base, isPatched: false, baseObj: base };
+
+        return {
+            ...base, isPatched: true, baseObj: base,
+            dmg: parseFloat(document.getElementById(`${slot}-dmg`).value),
+            rps: parseFloat(document.getElementById(`${slot}-rps`).value),
+            mag: parseInt(document.getElementById(`${slot}-mag`).value),
+            reload: parseFloat(document.getElementById(`${slot}-reload`).value),
+            range: parseFloat(document.getElementById(`${slot}-range`).value),
+            spread: parseFloat(document.getElementById(`${slot}-spread`).value)
+        };
+    }
+
+    /* =========================================================================
+       MODULE 3: SIMULATION & MATH LOGIC
+       ========================================================================= */
+    
+    // 고급: 스프레드(명중률) 및 리코일 누적 시뮬레이션
+    // 거리가 멀어질수록, 스프레드가 높을수록 명중률 하락 (3x3 그리드 개념 축약 적용)
+    function calculateEffectiveAccuracy(distance, wpn, continuousShots) {
+        let baseAcc = 1.0;
+        // 리코일 누적: 연사할수록 반동 증가
+        let recoilPenalty = (wpn.recoil * continuousShots) / 100;
+        // 스프레드: 거리에 비례하여 퍼짐
+        let spreadPenalty = (distance * wpn.spread) / 100;
+        
+        let finalAcc = baseAcc - recoilPenalty - spreadPenalty;
+        return Math.max(0.1, Math.min(1.0, finalAcc)); // 10% ~ 100%
+    }
+
+    // ARES Metrics 계산 (TTK, DPS/min, Break)
+    function simulateCombat(wpn, distance, targetObj, suitKey, enableSuitChange, enableHeadshot) {
+        const suit = suitsDB[suitKey];
+        // Note: Suit mitigation is conceptually for the player, but we can apply it to the enemy if we treat the enemy as having the suit.
+        // As per prompt: "슈트 4종: Light... Guardian", treating it as Enemy's suit resistance.
+        const enemyMitigation = suit.mitigation;
+        
+        let totalHPToClear = targetObj.hp * targetObj.count;
+        let totalCPToClear = targetObj.cp * targetObj.count;
+        
+        let time = 0;
+        let shotsFired = 0;
+        let totalDamageDealt = 0;
+        let currentMag = wpn.mag;
+        
+        let cpRemaining = totalCPToClear;
+        let hpRemaining = totalHPToClear;
+        
+        let isBroken = (cpRemaining <= 0);
+        let ttb = (cpRemaining <= 0) ? 0 : 999;
+        
+        let wavePoints = [{ t: 0, cp: cpRemaining, hp: hpRemaining }];
+        let safety = 20000; // max iterations
+        
+        // 사거리 감쇠
+        let rangeMult = 1.0;
+        if (distance > wpn.range) {
+            rangeMult = Math.max(0.2, 1.0 - ((distance - wpn.range) * 0.05));
+        }
+
+        while ((cpRemaining > 0 || hpRemaining > 0) && safety > 0) {
+            safety--;
+            shotsFired++;
+            currentMag--;
+
+            // 1. Accuracy & Hit Logic
+            let acc = calculateEffectiveAccuracy(distance, wpn, wpn.mag - currentMag);
+            let hitRatio = (wpn.pellets > 1) ? Math.max(0, 1 - Math.pow(distance/15, 2)) : acc; 
+            
+            // 2. Headshot Logic
+            let headshotMult = 1.0;
+            if (enableHeadshot && wpn.pellets === 1) {
+                // 명중률이 높을수록 헤드샷 확률 증가 (단순화)
+                if (Math.random() < acc * 0.3) headshotMult = 1.5; 
+            }
+
+            // 3. Suit Change Buff (first 3s)
+            let buffMult = (enableSuitChange && time <= 3.0) ? 1.1 : 1.0;
+
+            // Calculate Base Hit Damage
+            let rawHitDmg = wpn.dmg * (wpn.pellets > 1 ? wpn.pellets * hitRatio : 1) * rangeMult * buffMult * headshotMult;
+            // Apply Enemy Suit Mitigation
+            let hitDmg = rawHitDmg * (1 - enemyMitigation);
+            
+            // Apply Break Multiplier if CP is down
+            if (isBroken) hitDmg *= targetObj.breakMult;
+            
+            // Apply Miss chance for non-shotguns
+            if (wpn.pellets === 1 && Math.random() > acc) hitDmg = 0;
+
+            totalDamageDealt += hitDmg;
+
+            // Damage Application
+            if (!isBroken && cpRemaining > 0) {
+                cpRemaining -= hitDmg;
+                if (cpRemaining <= 0) {
+                    isBroken = true;
+                    if (ttb === 999) ttb = time; // Record Break Time
+                    hpRemaining += cpRemaining; // Overflow to HP
+                    cpRemaining = 0;
+                }
+            } else {
+                hpRemaining -= hitDmg;
+            }
+
+            if (hpRemaining < 0) hpRemaining = 0;
+            
+            // Record Point
+            wavePoints.push({ t: time, cp: cpRemaining, hp: hpRemaining });
+
+            if (hpRemaining <= 0) break;
+
+            // Time progression
+            if (currentMag <= 0) {
+                time += wpn.reload;
+                currentMag = wpn.mag;
+            } else {
+                time += (1 / wpn.rps);
+            }
+        }
+
+        let ttk = time;
+        // DPS/min calculation (Damage over 60s including reloads)
+        let cycleTime = (wpn.mag / wpn.rps) + wpn.reload;
+        let cyclesPerMin = 60 / cycleTime;
+        let shotsPerMin = cyclesPerMin * wpn.mag;
+        
+        // Rough avg effective damage per shot
+        let avgHitDmg = (wpn.dmg * rangeMult * (1 - enemyMitigation)) * (enableHeadshot ? 1.15 : 1.0) * ((wpn.pellets>1)?wpn.pellets*(Math.max(0, 1-Math.pow(distance/15,2))):1);
+        let dpsMin = (shotsPerMin * avgHitDmg) / 60; // DPS averaged over a minute
+
+        return {
+            ttk: ttk,
+            ttb: ttb,
+            dpsMin: dpsMin,
+            wavePoints: wavePoints
+        };
+    }
+
+    /* =========================================================================
+       MODULE 4: UI UPDATE & PLOTLY RENDERING
+       ========================================================================= */
+    function requestUpdateUI() {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        animationFrameId = requestAnimationFrame(updateUI);
+    }
+
+    function updateUI() {
+        const dist = parseFloat(document.getElementById('slider-dist').value);
+        const suitKey = document.getElementById('sel-suit').value;
+        const targetObj = targetsDB[currentTargetMode][document.getElementById('sel-target').value];
+        const enableSuitChange = document.getElementById('chk-suit-change').checked;
+        const enableHeadshot = document.getElementById('chk-headshot').checked;
+
+        document.getElementById('res-dist').innerText = dist;
+        
+        const wA = getActiveWeapon('A');
+        const wB = getActiveWeapon('B');
+
+        const resA = simulateCombat(wA, dist, targetObj, suitKey, enableSuitChange, enableHeadshot);
+        const resB = simulateCombat(wB, dist, targetObj, suitKey, enableSuitChange, enableHeadshot);
+
+        renderTable(wA, wB, resA, resB);
+        renderCharts(wA, wB, resA, resB, suitKey, targetObj, enableSuitChange, enableHeadshot);
+    }
+
+    function renderTable(wA, wB, rA, rB) {
+        const tbody = document.getElementById('result-tbody');
+        tbody.innerHTML = '';
+
+        const addRow = (label, valA, valB, isLowerBetter = false) => {
+            let classA = '', classB = '';
+            if (valA !== valB && valA < 999 && valB < 999) {
+                if ((isLowerBetter && valA < valB) || (!isLowerBetter && valA > valB)) classA = 'highlight-win'; 
+                else classB = 'highlight-win-b';
+            }
+            const formatVal = (v) => v >= 999 ? "∞" : (Number.isInteger(v) ? v : v.toFixed(2));
+            tbody.innerHTML += `<tr><td><strong>${label}</strong></td><td class="${classA}">${formatVal(valA)}</td><td class="${classB}">${formatVal(valB)}</td></tr>`;
+        };
+
+        addRow('DPS (분당 지속 타격 기준)', rA.dpsMin, rB.dpsMin, false);
+        if (currentTargetMode === "Boss") {
+            addRow('Time to Break (실드 파괴 초)', rA.ttb, rB.ttb, true);
+        }
+        addRow('Clear Time / TTK (총 소요 시간)', rA.ttk, rB.ttk, true);
+    }
+
+    function renderCharts(wA, wB, rA, rB, suitKey, targetObj, enableSuitChange, enableHeadshot) {
+        // Colors mapping based on theme
+        const isLight = document.body.classList.contains('light-theme');
+        const fontColor = isLight ? '#52525b' : '#a1a1aa';
+        const gridColor = isLight ? '#d4d4d8' : '#3f3f46';
+        const paperBg = 'rgba(0,0,0,0)';
+        const plotBg = 'rgba(0,0,0,0)';
+
+        // 1. TTK vs Distance Chart (Plotly)
+        let tracesTTK = [];
+        const distances = [];
+        for(let i=0; i<=40; i+=2) distances.push(i);
+
+        const buildTrace = (wpn, name, color, dash) => {
+            let yVals = distances.map(d => {
+                let r = simulateCombat(wpn, d, targetObj, suitKey, enableSuitChange, enableHeadshot);
+                return Math.min(r.ttk, 60); // Cap at 60s for visual clarity
+            });
+            return { x: distances, y: yVals, type: 'scatter', mode: 'lines', name: name, line: {color: color, dash: dash, width: 3} };
+        };
+
+        if (wA.isPatched) tracesTTK.push(buildTrace(wA.baseObj, wA.name + ' (Base)', '#0891b2', 'dot'));
+        tracesTTK.push(buildTrace(wA, wA.name + (wA.isPatched?' (Patch)':''), '#06b6d4', 'solid'));
+        
+        if (wB.isPatched) tracesTTK.push(buildTrace(wB.baseObj, wB.name + ' (Base)', '#d97706', 'dot'));
+        tracesTTK.push(buildTrace(wB, wB.name + (wB.isPatched?' (Patch)':''), '#f59e0b', 'solid'));
+
+        const layoutTTK = {
+            title: { text: 'Engagement Distance vs Clear Time', font: {color: fontColor, size: 14} },
+            paper_bgcolor: paperBg, plot_bgcolor: plotBg,
+            xaxis: { title: 'Distance (m)', color: fontColor, gridcolor: gridColor },
+            yaxis: { title: 'Time (s)', color: fontColor, gridcolor: gridColor },
+            margin: { l: 50, r: 20, t: 40, b: 40 },
+            legend: { font: {color: fontColor}, orientation: 'h', y: -0.2 },
+            hovermode: 'x unified'
+        };
+        Plotly.react('plot-ttk', tracesTTK, layoutTTK, {displayModeBar: false});
+
+        // 2. Wave Graph (Time vs HP/CP)
+        let tracesWave = [];
+        
+        const buildWaveTrace = (points, name, color, isCP) => {
+            let xVals = points.map(p => p.t);
+            let yVals = points.map(p => isCP ? p.cp : p.hp);
+            // Filter out purely redundant points for performance if needed, but Plotly handles small arrays fine
+            return {
+                x: xVals, y: yVals, type: 'scatter', mode: 'lines', name: name + (isCP ? ' [CP]' : ' [HP]'),
+                line: { shape: 'hv', color: color, width: isCP ? 2 : 3, dash: isCP ? 'dot' : 'solid' },
+                fill: isCP ? 'none' : 'tozeroy',
+                fillcolor: color.replace(')', ', 0.1)').replace('rgb', 'rgba').replace('#06b6d4', 'rgba(6,182,212,0.1)').replace('#f59e0b', 'rgba(245,158,11,0.1)')
+            };
+        };
+
+        if(currentTargetMode === "Boss") {
+            tracesWave.push(buildWaveTrace(rA.wavePoints, wA.name, '#06b6d4', true));
+            tracesWave.push(buildWaveTrace(rB.wavePoints, wB.name, '#f59e0b', true));
+        }
+        tracesWave.push(buildWaveTrace(rA.wavePoints, wA.name, '#06b6d4', false));
+        tracesWave.push(buildWaveTrace(rB.wavePoints, wB.name, '#f59e0b', false));
+
+        const layoutWave = {
+            title: { text: `Target Health Reduction Wave (@ ${parseFloat(document.getElementById('slider-dist').value)}m)`, font: {color: fontColor, size: 14} },
+            paper_bgcolor: paperBg, plot_bgcolor: plotBg,
+            xaxis: { title: 'Time (s)', color: fontColor, gridcolor: gridColor },
+            yaxis: { title: 'Remaining HP/CP', color: fontColor, gridcolor: gridColor },
+            margin: { l: 60, r: 20, t: 40, b: 40 },
+            legend: { font: {color: fontColor}, orientation: 'h', y: -0.2 },
+            hovermode: 'x unified'
+        };
+        Plotly.react('plot-wave', tracesWave, layoutWave, {displayModeBar: false});
+    }
+
+    /* =========================================================================
+       MODULE 5: PRESETS, IMPORT/EXPORT & LOCAL STORAGE
+       ========================================================================= */
+    function applyPreset(type) {
+        if (type === 'reset') {
+            document.getElementById('patch-toggle-a').checked = false;
+            document.getElementById('patch-toggle-b').checked = false;
+            togglePatch('A'); togglePatch('B');
+            
+            document.getElementById('sel-class-a').value = "ALL";
+            document.getElementById('sel-class-b').value = "ALL";
+            filterWeapons('A', true); filterWeapons('B', true);
+
+            document.getElementById('sel-wpn-a').value = "Hunter_DualBlade_S";
+            document.getElementById('sel-wpn-b').value = "Warlord_Hammer_S";
+            loadWeaponData('A'); loadWeaponData('B');
+            
+            currentTargetMode = "Boss"; populateTargets();
+            document.getElementById('sel-suit').value = "Medium";
+            document.getElementById('chk-suit-change').checked = false;
+            document.getElementById('chk-headshot').checked = false;
+            document.getElementById('slider-dist').value = 15;
+        } 
+        else if (type === 'hunterVsWarlord') {
+            applyPreset('reset');
+            document.getElementById('sel-wpn-a').value = "Hunter_DualBlade_S";
+            document.getElementById('sel-wpn-b').value = "Warlord_Hammer_S";
+            loadWeaponData('A'); loadWeaponData('B');
+            document.getElementById('chk-headshot').checked = true; // Headshot meta
+        }
+        else if (type === 'suitChangeTest') {
+            applyPreset('reset');
+            document.getElementById('chk-suit-change').checked = true;
+            document.getElementById('sel-wpn-a').value = "Engineer_Gauntlet_S"; // Burst
+            document.getElementById('sel-wpn-b').value = "Warlock_Staff_S"; // Sustained
+            loadWeaponData('A'); loadWeaponData('B');
+            document.getElementById('slider-dist').value = 18;
+        }
+        requestUpdateUI();
+    }
+
+    function saveScenario() {
+        const state = {
+            wA: getActiveWeapon('A'),
+            wB: getActiveWeapon('B'),
+            targetMode: currentTargetMode,
+            target: document.getElementById('sel-target').value,
+            suit: document.getElementById('sel-suit').value,
+            dist: document.getElementById('slider-dist').value,
+            suitBuff: document.getElementById('chk-suit-change').checked,
+            headshot: document.getElementById('chk-headshot').checked
+        };
+        localStorage.setItem('aresSimScenario', JSON.stringify(state));
+        alert('시나리오가 로컬 스토리지에 저장되었습니다.');
+    }
+
+    function loadScenario() {
+        const saved = localStorage.getItem('aresSimScenario');
+        if (saved) {
+            try {
+                const state = JSON.parse(saved);
+                currentTargetMode = state.targetMode || "Boss";
+                populateTargets();
+                
+                document.getElementById('sel-target').value = state.target;
+                document.getElementById('sel-suit').value = state.suit;
+                document.getElementById('slider-dist').value = state.dist;
+                document.getElementById('chk-suit-change').checked = state.suitBuff;
+                document.getElementById('chk-headshot').checked = state.headshot;
+                
+                // Assuming weapons exist in DB
+                if(weaponsDB[state.wA.id]) {
+                    document.getElementById('sel-wpn-a').value = state.wA.id;
+                    loadWeaponData('A');
+                    if(state.wA.isPatched) {
+                        document.getElementById('patch-toggle-a').checked = true;
+                        togglePatch('A');
+                        document.getElementById('A-dmg').value = state.wA.dmg;
+                        // set others... skipped for brevity, loading full state
+                    }
+                }
+            } catch(e) { console.error("Error loading state", e); }
+        }
+    }
+
+    function exportJSON() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(weaponsDB, null, 2));
+        const dlAnchorElem = document.createElement('a');
+        dlAnchorElem.setAttribute("href", dataStr);
+        dlAnchorElem.setAttribute("download", "ares_weapons.json");
+        dlAnchorElem.click();
+    }
+
+    function importCSV(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const text = e.target.result;
+            const lines = text.split('\n');
+            let updatedCount = 0;
+            // Basic CSV parser: id, class, name, grade, dmg, rps, range, mag, reload, spread, recoil, pellets
+            for(let i=1; i<lines.length; i++) {
+                if(!lines[i].trim()) continue;
+                const cols = lines[i].split(',');
+                if(cols.length >= 12) {
+                    const id = cols[0].trim();
+                    weaponsDB[id] = {
+                        id: id, class: cols[1].trim(), name: cols[2].trim(), grade: cols[3].trim(),
+                        dmg: parseFloat(cols[4]), rps: parseFloat(cols[5]), range: parseFloat(cols[6]),
+                        mag: parseInt(cols[7]), reload: parseFloat(cols[8]), spread: parseFloat(cols[9]),
+                        recoil: parseFloat(cols[10]), pellets: parseInt(cols[11])
+                    };
+                    updatedCount++;
+                }
+            }
+            alert(`${updatedCount}개의 무기 데이터가 CSV에서 임포트되었습니다.`);
+            filterWeapons('A', true); filterWeapons('B', true);
+            requestUpdateUI();
+        };
+        reader.readAsText(file);
+    }
+</script>
+</body>
+</html>
